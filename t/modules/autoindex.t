@@ -98,7 +98,7 @@ foreach my $fancy (0,1) {
             $config_string .= "IndexOrderDefault $order $component\n";
 
             print "---\n$config_string\n";
-            sok { ai_test($config_string,$C,$O,$uri) };
+            sok { ai_test($config_string,$C,$O,$uri) } or print "Error captured : $@\n";
 
             ## test explicit order requests ##
             foreach $C (qw(N M S)) {
@@ -111,7 +111,7 @@ foreach my $fancy (0,1) {
                     }
 
                     print "---\n$config_string\n(C=$C O=$O)\n";
-                    sok { ai_test($config_string,$C,$O,$test_uri) };
+                    sok { ai_test($config_string,$C,$O,$test_uri) } or print "Error captured : $@\n";
 
                 }
             }
@@ -123,6 +123,7 @@ sub ai_test ($$$$) {
     my ($htconf,$c,$o,$t_uri) = @_;
 
     my $html_head;
+    my $html_head1; # alternative correct header
 
     if (have_min_apache_version('2.5.1')) {
         $html_head = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">';
@@ -141,6 +142,7 @@ sub ai_test ($$$$) {
 <h1>Index of $uri_prefix</h1>
 HEAD
     my $html_foot = "${hr}</pre>\n</body></html>\n";
+    my $html_foot1 = "</pre>${hr}\n</body></html>\n";
 
     my $i;
     my $fail = 0;
@@ -248,11 +250,16 @@ HEAD
         }
 
         if ($have_apache_2) {
+            $html_head1 = $html_head;
 
             $html_head .=
         "<pre>      <a href=\"?$name_href\">Name</a>                    <a href=\"?$date_href\">Last modified</a>      <a href=\"?$size_href\">Size</a>  <a href=\"?C=D$sep"."O=A\">Description</a>${hr}      <a href=\"/modules/autoindex/\">Parent Directory</a>                             -   \n";
  
+            $html_head1 .=
+        "<pre>      <a href=\"?$name_href\">Name</a>                    <a href=\"?$date_href\">Last modified</a>      <a href=\"?$size_href\">Size</a>  <a href=\"?C=D$sep"."O=A\">Description</a></pre>${hr}<pre>      <a href=\"/modules/autoindex/\">Parent Directory</a>                             -   \n";
+ 
         $html_foot = "${hr}</pre>\n</body></html>\n";
+        $html_foot1 = "</pre>${hr}\n</body></html>\n";
 
         } else {
 
@@ -285,13 +292,17 @@ HEAD
 
     ## verify html heading ##
     my @exp_head = split /\n/, $html_head;
+    my @exp_head1;
+    @exp_head1 = split /\n/, $html_head1 if $html_head1;
+
     my @actual = split /\n/, $actual;
     for ($i=0;$i<@exp_head;$i++) {
 
         $actual[$i] = lc($actual[$i]);
         $exp_head[$i] = lc($exp_head[$i]);
+        $exp_head1[$i] = lc($exp_head1[$i]) if $html_head1;
 
-        if ($actual[$i] eq $exp_head[$i]) {
+        if ($actual[$i] eq $exp_head[$i] || ($html_head1 && $exp_head1[$i] eq $actual[$i])) {
             next;
         } else {
             if (!$have_apache_2 && $actual[$i] =~ /parent directory/ &&
@@ -359,11 +370,15 @@ HEAD
 
     ## the only thing left in @actual should be the foot
     my @foot = split /\n/, $html_foot;
+    my @foot1;
+    @foot1 = split /\n/, $html_foot1 if $html_head1;
     $e = 0;
     for ($i=$i;$foot[$e];$i++) {
         $actual[$i] = lc($actual[$i]);
         $foot[$e] = lc($foot[$e]);
-        if ($actual[$i] ne $foot[$e]) {
+        $foot1[$e] = lc($foot1[$e]) if $html_head1;
+
+        if ($actual[$i] ne $foot[$e] && !($html_head1 && $actual[$i] eq $foot1[$e])) {
             $fail = 1;
             print "expect:\n->$foot[$e]<-\nactual:\n->$actual[$i]<-\n";
             last;
